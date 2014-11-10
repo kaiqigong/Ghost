@@ -1,11 +1,12 @@
 var errors  = require('../errors'),
     storage = {};
 
+var qiniuConfig  = require('../config/').qiniu;
+
 function getStorage(storageChoice) {
     // TODO: this is where the check for storage apps should go
     // Local file system is the default.  Fow now that is all we support.
-    storageChoice = 'local-file-store';
-
+    storageChoice = qiniuConfig? 'qiniu':'local-file-store';
     if (storage[storageChoice]) {
         return storage[storageChoice];
     }

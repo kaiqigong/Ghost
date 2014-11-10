@@ -153,7 +153,15 @@ ConfigManager.prototype.set = function (config) {
         },
         deprecatedItems: ['updateCheck', 'mail.fromaddress'],
         // create a hash for cache busting assets
-        assetHash: assetHash
+        assetHash: assetHash,
+        qiniu: {
+            bucketname: 'cage', //空间名称
+            ACCESS_KEY: 'PR0t5xIyMRIWCLgeLFbtOND57bnTIpp7CGRMWMCI', //具体含义请参考七牛的文档
+            SECRET_KEY: 'DsWayvJtPhFyg-NzJNKFnOuEO5I67ZCZyG8NOyYJ',
+            root: '/images/', //文件存储在哪个目录。可以设置为 `/` 表示存储在根目录
+            prefix: 'http://cage.qiniudn.com'  //上传的文件的 URL 前缀，可以是你自己绑定的二级域名或者七牛云默认分配的二级域名。文件最中的 URL 为：prefix + root + md5(file) + extension
+            // 例如：http://cdn.my-domainname.com/images/a/ab/dqwerqwetetqwedfasdf.png
+        }
     });
 
     // Also pass config object to
