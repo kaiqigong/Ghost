@@ -19,7 +19,6 @@ var _       = require('lodash'),
     
     qiniu.conf.ACCESS_KEY = qiniuConfig.ACCESS_KEY;
     qiniu.conf.SECRET_KEY = qiniuConfig.SECRET_KEY;
-    qiniu.conf.USER_AGENT = 'Ghost 0.4.2';
 
 var putPolicy = new qiniu.rs.PutPolicy(qiniuConfig.bucketname),
     uptoken = putPolicy.token();
@@ -40,11 +39,8 @@ QiniuFileStore.prototype.save = function (image) {
         key,
         extra = new qiniu.io.PutExtra();
 
-    var savedpath = path.join(config.paths.imagesPath, image.name);
-
-    return Promise.promisify(fs.copy)(image.path, savedpath).then(function(){
-        return Promise.promisify(fs.readFile)(savedpath);
-    }).then(function(data){
+    return Promise.promisify(fs.readFile)(image.path)
+    .then(function(data){
         md5 = md5sum.update(data).digest('hex');
 
         targetFilename = path.join(targetDirRoot, md5.replace(/^(\w{1})(\w{2})(\w+)$/, '$1/$2/$3')) + ext;
@@ -54,7 +50,7 @@ QiniuFileStore.prototype.save = function (image) {
         return Promise.promisify(qiniu.io.put)(uptoken, key, data, extra);
     }).then(function () {
         // prefix + targetFilename
-        var fullUrl = qiniuConfig.prefix + targetFilename;
+        var fullUrl = qiniuConfig.prefix + targetFilename + qiniuConfig.suffix;
         return fullUrl;
     }).catch(function (e) {
         errors.logError(e);
