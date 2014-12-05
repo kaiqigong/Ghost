@@ -714,11 +714,11 @@ User = ghostBookshelf.Model.extend({
             hash.update(String(dbHash));
 
             text += [expires, email, hash.digest('base64')].join('|');
-
+            // Todo: cage: should replace - to = when use this
             // it's possible that the token might get URI encoded, which breaks it
             // we replace any `=`s with `-`s as they aren't valid base64 characters
             // but are valid in a URL, so won't suffer encoding issues
-            return new Buffer(text).toString('base64').replace('=', '-');
+            return new Buffer(text).toString('base64').replace(/=/g, '-');
         });
     },
 
@@ -868,7 +868,7 @@ User = ghostBookshelf.Model.extend({
             request({url: 'http:' + gravatarUrl, timeout: 2000}, function (err, response) {
                 if (err) {
                     // just resolve with no image url
-                    resolve(userData);
+                    return resolve(userData);
                 }
 
                 if (response.statusCode !== 404) {

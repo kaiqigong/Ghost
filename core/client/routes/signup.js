@@ -11,13 +11,15 @@ var SignupRoute = Ember.Route.extend(styleBody, loadingIndicator, {
     },
 
     model: function (params) {
+        params.token = params.token.replace(/-/g, '=');
         var self = this,
             tokenText,
             email,
             model = {},
             re = /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$/;
-
+        // Todo: cage: enable open register
         return new Ember.RSVP.Promise(function (resolve) {
+            console.log(params);
             if (!re.test(params.token)) {
                 self.notifications.showError('Invalid token.', {delayed: true});
 
@@ -25,6 +27,7 @@ var SignupRoute = Ember.Route.extend(styleBody, loadingIndicator, {
             }
 
             tokenText = atob(params.token);
+            console.log(tokenText);
             email = tokenText.split('|')[1];
 
             model.email = email;
