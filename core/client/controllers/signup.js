@@ -16,27 +16,51 @@ var SignupController = Ember.ObjectController.extend(ValidationEngine, {
 
             this.toggleProperty('submitting');
             this.validate({format: false}).then(function () {
-                ajax({
-                    url: self.get('ghostPaths.url').api('authentication', 'invitation'),
-                    type: 'POST',
-                    dataType: 'json',
-                    data: {
-                        invitation: [{
-                            name: data.name,
-                            email: data.email,
-                            password: data.password,
-                            token: data.token
-                        }]
-                    }
-                }).then(function () {
-                    self.get('session').authenticate('simple-auth-authenticator:oauth2-password-grant', {
-                        identification: self.get('email'),
-                        password: self.get('password')
+                if (data.token){
+                    ajax({
+                        url: self.get('ghostPaths.url').api('authentication', 'invitation'),
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            invitation: [{
+                                name: data.name,
+                                email: data.email,
+                                password: data.password,
+                                token: data.token
+                            }]
+                        }
+                    }).then(function () {
+                        self.get('session').authenticate('simple-auth-authenticator:oauth2-password-grant', {
+                            identification: self.get('email'),
+                            password: self.get('password')
+                        });
+                    }, function (resp) {
+                        self.toggleProperty('submitting');
+                        self.notifications.showAPIError(resp);
                     });
-                }, function (resp) {
-                    self.toggleProperty('submitting');
-                    self.notifications.showAPIError(resp);
-                });
+                } else {
+                    // todo: cage: signup logic
+                    ajax({
+                        url: self.get('ghostPaths.url').api('authentication', 'signup'),
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            users: [{
+                                name: data.name,
+                                email: data.email,
+                                password: data.password,
+                            }]
+                        }
+                    }).then(function () {
+                        self.get('session').authenticate('simple-auth-authenticator:oauth2-password-grant', {
+                            identification: self.get('email'),
+                            password: self.get('password')
+                        });
+                    }, function (resp) {
+                        self.toggleProperty('submitting');
+                        self.notifications.showAPIError(resp);
+                    });
+                }
             }, function (errors) {
                 self.toggleProperty('submitting');
                 self.notifications.showErrors(errors);

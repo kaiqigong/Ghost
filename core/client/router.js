@@ -18,6 +18,7 @@ Router.map(function () {
     this.route('setup');
     this.route('signin');
     this.route('signout');
+    this.route('signup');
     this.route('signup', {path: '/signup/:token'});
     this.route('forgotten');
     this.route('reset', {path: '/reset/:token'});

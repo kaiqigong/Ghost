@@ -106,6 +106,7 @@ authentication = {
         });
     },
 
+
     /**
      * ### Accept Invitation
      * @param {User} object the user to create
@@ -144,6 +145,52 @@ authentication = {
             }).catch(function (error) {
                 return Promise.reject(new errors.UnauthorizedError(error.message));
             });
+        });
+    },
+
+    /**
+     * ### Signup user
+     * @param {User} object the user to create
+     * @returns {Promise(User}} Newly created user
+     */
+    signup: function signup(object) {
+        var addOperation,
+            newUser,
+            user,
+            options = { include: [ 'roles' ], context: { user: 1 } };
+
+        return utils.checkObject(object, 'users')
+        .then(function (data) {
+            newUser = data.users[0];
+
+            addOperation = function () {
+                if (!newUser.email) {
+                    return Promise.reject(new errors.BadRequestError('No email provided.'));
+                }
+                if (!newUser.password) {
+                    return Promise.reject(new errors.BadRequestError('No password provided.'));
+                }
+                newUser.status = 'active';
+
+                return dataProvider.User.getByEmail(
+                    newUser.email
+                ).then(function (foundUser) {
+                    if (!foundUser) {
+                        return dataProvider.User.add(newUser, options);
+                    } else {
+                        return Promise.reject(new errors.BadRequestError('email is used'));
+                    }
+                }).then(function (createdUser) {
+                    // todo: cage: send activate email.
+                    return Promise.resolve({users: [createdUser]});
+                }).catch(function (error) {
+                    return Promise.reject(error);
+                });
+            };
+
+            return addOperation();
+        }).catch(function (error) {
+            return errors.handleAPIError(error, 'You do not have permission to add this user');
         });
     },
 

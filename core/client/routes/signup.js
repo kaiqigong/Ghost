@@ -11,47 +11,53 @@ var SignupRoute = Ember.Route.extend(styleBody, loadingIndicator, {
     },
 
     model: function (params) {
-        params.token = params.token.replace(/-/g, '=');
+        console.log('in');
         var self = this,
-            tokenText,
-            email,
-            model = {},
+        tokenText,
+        email,
+        model = {};
+        if (!params.token){
+            return new Ember.RSVP.Promise(function (resolve) {
+                resolve(model);
+                }).catch(function () {
+                    resolve(model);
+                });
+        } else {
+            params.token = params.token.replace(/-/g, '=');
             re = /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$/;
-        // Todo: cage: enable open register
-        return new Ember.RSVP.Promise(function (resolve) {
-            console.log(params);
-            if (!re.test(params.token)) {
-                self.notifications.showError('Invalid token.', {delayed: true});
-
-                return resolve(self.transitionTo('signin'));
-            }
-
-            tokenText = atob(params.token);
-            console.log(tokenText);
-            email = tokenText.split('|')[1];
-
-            model.email = email;
-            model.token = params.token;
-
-            return ic.ajax.request({
-                url: self.get('ghostPaths.url').api('authentication', 'invitation'),
-                type: 'GET',
-                dataType: 'json',
-                data: {
-                    email: email
-                }
-            }).then(function (response) {
-                if (response && response.invitation && response.invitation[0].valid === false) {
-                    self.notifications.showError('The invitation does not exist or is no longer valid.', {delayed: true});
+            return new Ember.RSVP.Promise(function (resolve) {
+                if (!re.test(params.token)) {
+                    self.notifications.showError('Invalid token.', {delayed: true});
 
                     return resolve(self.transitionTo('signin'));
                 }
 
-                resolve(model);
-            }).catch(function () {
-                resolve(model);
+                tokenText = atob(params.token);
+                email = tokenText.split('|')[1];
+
+                model.email = email;
+                model.token = params.token;
+
+                return ic.ajax.request({
+                    url: self.get('ghostPaths.url').api('authentication', 'invitation'),
+                    type: 'GET',
+                    dataType: 'json',
+                    data: {
+                        email: email
+                    }
+                }).then(function (response) {
+                    if (response && response.invitation && response.invitation[0].valid === false) {
+                        self.notifications.showError('The invitation does not exist or is no longer valid.', {delayed: true});
+
+                        return resolve(self.transitionTo('signin'));
+                    }
+
+                    resolve(model);
+                }).catch(function () {
+                    resolve(model);
+                });
             });
-        });
+        }
     },
 
     deactivate: function () {
