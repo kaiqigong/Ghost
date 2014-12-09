@@ -11,7 +11,6 @@ var SignupRoute = Ember.Route.extend(styleBody, loadingIndicator, {
     },
 
     model: function (params) {
-        console.log('in');
         var self = this,
         tokenText,
         email,

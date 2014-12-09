@@ -162,6 +162,9 @@ ConfigManager.prototype.set = function (config) {
             prefix: 'http://cage.qiniudn.com', //上传的文件的 URL 前缀，可以是你自己绑定的二级域名或者七牛云默认分配的二级域名。文件最中的 URL 为：prefix + root + md5(file) + extension
             // 例如：http://cdn.my-domainname.com/images/a/ab/dqwerqwetetqwedfasdf.png
             suffix: '-640x'
+        },
+        privacy: {
+            useGoogleFonts: false
         }
     });
 
