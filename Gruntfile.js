@@ -111,14 +111,23 @@ var _              = require('lodash'),
                 },
                 sass: {
                     files: [
-                        'core/client/assets/sass/**/*.scss'
+                        'core/client/assets/sass/**/*.scss',
+                        'content/themes/myCasper/assets/css/**/*.scss'
                     ],
                     tasks: ['css']
+                },
+                coffee: {
+                    files: [
+                      'content/themes/myCasper/assets/js/*.coffee'
+                    ],
+                    task: ['coffee']
                 },
                 livereload: {
                     files: [
                         'content/themes/casper/assets/css/*.css',
+                        'content/themes/myCasper/assets/css/*.css',
                         'content/themes/casper/assets/js/*.js',
+                        'content/themes/myCasper/assets/js/*.js',
                         'core/client/assets/css/*.css',
                         'core/built/scripts/*.js'
                     ],
@@ -318,7 +327,8 @@ var _              = require('lodash'),
                     },
                     files: [
                         {dest: path.resolve('core/client/assets/css/<%= pkg.name %>.min.css'), src: path.resolve('core/client/assets/sass/screen.scss')},
-                        {dest: path.resolve('core/client/docs/dist/css/<%= pkg.name %>.min.css'), src: path.resolve('core/client/assets/sass/screen.scss')}
+                        {dest: path.resolve('core/client/docs/dist/css/<%= pkg.name %>.min.css'), src: path.resolve('core/client/assets/sass/screen.scss')},
+                        {dest: path.resolve('content/themes/myCasper/assets/css/theme.min.css'), src: path.resolve('content/themes/myCasper/assets/css/theme.scss')}
                     ]
                 }
             },
@@ -339,6 +349,17 @@ var _              = require('lodash'),
                     src: 'core/client/docs/dist/css/<%= pkg.name %>.min.css',
                     dest: 'core/client/docs/dist/css/<%= pkg.name %>.min.css'
                 }
+            },
+
+            coffee: {
+              compileBare: {
+                options: {
+                  bare: true
+                },
+                files: {
+                  'content/themes/myCasper/assets/js/logics.js': 'content/themes/myCasper/assets/js/**/*.coffee', // 1:1 compile
+                }
+              }
             },
 
             // ### grunt-ember-templates
@@ -1034,7 +1055,7 @@ var _              = require('lodash'),
         // Compiles concatenates javascript files for the admin UI into a handful of files instead
         // of many files, and makes sure the bower dependencies are in the right place.
         grunt.registerTask('default', 'Build JS & templates for development',
-            ['concat:dev', 'copy:dev', 'css', 'emberBuildDev']);
+            ['concat:dev', 'copy:dev', 'css', 'coffee', 'emberBuildDev']);
 
         // ### Live reload
         // `grunt dev` - build assets on the fly whilst developing
