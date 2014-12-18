@@ -278,7 +278,7 @@ setupMiddleware = function (blogAppInstance, adminApp) {
 
     // Wechat apis
     var wechat = require('wechat');
-    blogApp.use('/wechat', wechat('marryme', function (req, res, next) {
+    blogApp.use('/wechat', wechat(config.wechat, function (req, res, next) {
       // 微信输入信息都在req.weixin上
       var message = req.weixin;
       console.log(message);

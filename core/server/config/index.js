@@ -163,6 +163,11 @@ ConfigManager.prototype.set = function (config) {
             // 例如：http://cdn.my-domainname.com/images/a/ab/dqwerqwetetqwedfasdf.png
             suffix: '-640x'
         },
+        wechat: {
+          token: 'marryme',
+          appid: 'wx0a52c2b7fad7d503',
+          encodingAESKey: 'ib4GtMaaJM0PDcsbuqEu2srEMcK684byea5GrF3V2Cr'
+        },
         privacy: {
             useGoogleFonts: false
         }
