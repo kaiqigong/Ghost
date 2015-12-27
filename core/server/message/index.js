@@ -5,6 +5,8 @@ var wechatMsgHandler = wechat(config.wechat, function (req, res, next) {
   // 微信输入信息都在req.weixin上
   var message = req.weixin;
   console.log(message);
+  // todo: get user info
+  wechat.getUser()
   if (message.FromUserName === 'diaosi') {
     // 回复屌丝(普通回复)
     res.reply('hehe');
