@@ -32,7 +32,7 @@ describe('Configuration API', function () {
     should.exist(ConfigurationAPI);
 
     it('can browse config', function (done) {
-        var updatedConfig = _.extend(config, newConfig);
+        var updatedConfig = _.extend({}, config, newConfig);
         config.set(updatedConfig);
         ConfigurationAPI.__set__('config', updatedConfig);
 
@@ -49,11 +49,11 @@ describe('Configuration API', function () {
     });
 
     it('can read config', function (done) {
-        var updatedConfig = _.extend(config, newConfig);
+        var updatedConfig = _.extend({}, config, newConfig);
         config.set(updatedConfig);
         ConfigurationAPI.__set__('config', updatedConfig);
 
-        ConfigurationAPI.read(_.extend(testUtils.context.owner, {key: 'database'})).then(function (response) {
+        ConfigurationAPI.read(_.extend({}, testUtils.context.owner, {key: 'database'})).then(function (response) {
             should.exist(response);
             should.exist(response.configuration);
             testUtils.API.checkResponse(response.configuration[0], 'configuration');

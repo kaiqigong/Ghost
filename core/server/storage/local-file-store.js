@@ -19,9 +19,9 @@ util.inherits(LocalFileStore, baseStore);
 // Saves the image to storage (the file system)
 // - image is the express image object
 // - returns a promise which ultimately returns the full url to the uploaded image
-LocalFileStore.prototype.save = function (image) {
-    var targetDir = this.getTargetDir(config.paths.imagesPath),
-        targetFilename;
+LocalFileStore.prototype.save = function (image, targetDir) {
+    targetDir = targetDir || this.getTargetDir(config.paths.imagesPath);
+    var targetFilename;
 
     return this.getUniqueFileName(this, image, targetDir).then(function (filename) {
         targetFilename = filename;
@@ -42,7 +42,8 @@ LocalFileStore.prototype.save = function (image) {
 
 LocalFileStore.prototype.exists = function (filename) {
     return new Promise(function (resolve) {
-        fs.exists(filename, function (exists) {
+        fs.stat(filename, function (err) {
+            var exists = !err;
             resolve(exists);
         });
     });
@@ -51,7 +52,7 @@ LocalFileStore.prototype.exists = function (filename) {
 // middleware for serving the files
 LocalFileStore.prototype.serve = function () {
     // For some reason send divides the max age number by 1000
-    return express['static'](config.paths.imagesPath, {maxAge: utils.ONE_YEAR_MS});
+    return express.static(config.paths.imagesPath, {maxAge: utils.ONE_YEAR_MS});
 };
 
 module.exports = LocalFileStore;

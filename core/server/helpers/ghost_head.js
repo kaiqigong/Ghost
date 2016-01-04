@@ -14,143 +14,351 @@ var hbs             = require('express-hbs'),
     config          = require('../config'),
     filters         = require('../filters'),
 
+    api                 = require('../api'),
+    assetHelper         = require('./asset'),
     urlHelper           = require('./url'),
     meta_description    = require('./meta_description'),
     meta_title          = require('./meta_title'),
     excerpt             = require('./excerpt'),
     tagsHelper          = require('./tags'),
+    imageHelper         = require('./image'),
+    labs                = require('../utils/labs'),
+
+    blog,
     ghost_head;
 
-ghost_head = function (options) {
-    /*jshint unused:false*/
-    var self = this,
-        blog = config.theme,
-        useStructuredData = !config.isPrivacyDisabled('useStructuredData'),
-        head = [],
-        majorMinor = /^(\d+\.)?(\d+)/,
-        trimmedVersion = this.version,
+function getClient() {
+    if (labs.isSet('publicAPI') === true) {
+        return api.clients.read({slug: 'ghost-frontend'}).then(function (client) {
+            client = client.clients[0];
+            if (client.status === 'enabled') {
+                return {
+                    id: client.slug,
+                    secret: client.secret
+                };
+            }
+
+            return {};
+        });
+    }
+
+    return {};
+}
+
+function writeMetaTag(property, content, type) {
+    type = type || property.substring(0, 7) === 'twitter' ? 'name' : 'property';
+    return '<meta ' + type + '="' + property + '" content="' + content + '" />';
+}
+
+function getImage(props, context, contextObject) {
+    if (context === 'home' || context === 'author') {
+        contextObject.image = contextObject.cover;
+    }
+
+    props.image = imageHelper.call(contextObject, {hash: {absolute: true}});
+
+    if (context === 'post' && contextObject.author) {
+        props.author_image = imageHelper.call(contextObject.author, {hash: {absolute: true}});
+    }
+}
+
+function getPaginationUrls(pagination, relativeUrl, secure, head) {
+    var trimmedUrl, next, prev,
         trimmedUrlpattern = /.+(?=\/page\/\d*\/)/,
-        trimmedUrl, next, prev, tags,
-        ops = [],
-        structuredData,
-        coverImage, authorImage, keywords,
-        schema;
+        tagOrAuthorPattern = /\/(tag)|(author)\//;
 
-    trimmedVersion = trimmedVersion ? trimmedVersion.match(majorMinor)[0] : '?';
-    // Push Async calls to an array of promises
-    ops.push(urlHelper.call(self, {hash: {absolute: true}}));
-    ops.push(meta_description.call(self));
-    ops.push(meta_title.call(self));
-
-    // Resolves promises then push pushes meta data into ghost_head
-    return Promise.settle(ops).then(function (results) {
-        var url = results[0].value(),
-            metaDescription = results[1].value(),
-            metaTitle = results[2].value(),
-            publishedDate, modifiedDate,
-            tags = tagsHelper.call(self.post, {hash: {autolink: 'false'}}).string.split(','),
-            card = 'content';
-
-        if (!metaDescription) {
-            metaDescription = excerpt.call(self.post, {hash: {words: '40'}}).string;
+    trimmedUrl = relativeUrl.match(trimmedUrlpattern);
+    if (pagination.prev) {
+        prev = (pagination.prev > 1 ? '/page/' + pagination.prev + '/' : '/');
+        prev = (trimmedUrl) ? trimmedUrl + prev : prev;
+        head.push('<link rel="prev" href="' +
+                config.urlFor({relativeUrl: prev, secure: secure}, true) + '" />'
+        );
+    }
+    if (pagination.next) {
+        next = '/page/' + pagination.next + '/';
+        if (trimmedUrl) {
+            next = trimmedUrl + next;
+        } else if (tagOrAuthorPattern.test(relativeUrl)) {
+            next = relativeUrl.slice(0, -1) + next;
         }
-        if (tags[0] !== '') {
-            keywords = tagsHelper.call(self.post, {hash: {autolink: 'false', seperator: ', '}}).string;
+        head.push('<link rel="next" href="' +
+                config.urlFor({relativeUrl: next, secure: secure}, true) + '" />'
+        );
+    }
+    return head;
+}
+
+function addContextMetaData(context, data, metaData) {
+    // escaped data
+    metaData.metaTitle = hbs.handlebars.Utils.escapeExpression(metaData.metaTitle);
+    metaData.metaDescription = metaData.metaDescription ? hbs.handlebars.Utils.escapeExpression(metaData.metaDescription) : null;
+
+    if (context === 'author') {
+        metaData.authorUrl =  hbs.handlebars.Utils.escapeExpression(blog.url + '/author/' + data.author.slug);
+        metaData.ogType = 'profile';
+    } else if (context === 'post') {
+        metaData.publishedDate = moment(data.post.published_at).toISOString();
+        metaData.modifiedDate = moment(data.post.updated_at).toISOString();
+        metaData.authorUrl = hbs.handlebars.Utils.escapeExpression(blog.url + '/author/' + data.post.author.slug);
+        metaData.ogType = 'article';
+    }
+    return metaData;
+}
+
+function initMetaData(context, data, results) {
+    var metaData = {
+        url: results.url,
+        metaDescription: results.meta_description || null,
+        metaTitle: results.meta_title,
+        coverImage:  results.image,
+        authorImage: results.author_image,
+        publishedDate: null,
+        modifiedDate: null,
+        tags: null,
+        card: 'summary',
+        authorUrl: null,
+        ogType: 'website',
+        keywords: null,
+        blog: blog,
+        title: blog.title,
+        clientId: results.client.id,
+        clientSecret: results.client.secret
+    };
+
+    if (!metaData.metaDescription) {
+        if (context === 'post') {
+            metaData.metaDescription = excerpt.call(data.post, {hash: {words: '40'}}).string + '...';
+        } else if (context === 'tag') {
+            metaData.metaDescription = data.tag.description ? data.tag.description : null;
         }
-        head.push('<link rel="canonical" href="' + url + '" />');
+    }
+    return addContextMetaData(context, data, metaData);
+}
 
-        if (self.pagination) {
-            trimmedUrl = self.relativeUrl.match(trimmedUrlpattern);
-            if (self.pagination.prev) {
-                prev = (self.pagination.prev > 1 ? prev = '/page/' + self.pagination.prev + '/' : prev = '/');
-                prev = (trimmedUrl) ? '/' + trimmedUrl + prev : prev;
-                head.push('<link rel="prev" href="' + config.urlFor({relativeUrl: prev, secure: self.secure}, true) + '" />');
-            }
-            if (self.pagination.next) {
-                next = '/page/' + self.pagination.next + '/';
-                next = (trimmedUrl) ? '/' + trimmedUrl + next : next;
-                head.push('<link rel="next" href="' + config.urlFor({relativeUrl: next, secure: self.secure}, true) + '" />');
-            }
+function getStructuredData(metaData) {
+    var structuredData;
+
+    if (metaData.coverImage) {
+        metaData.card = 'summary_large_image';
+    }
+
+    structuredData = {
+        'og:site_name': metaData.title,
+        'og:type': metaData.ogType,
+        'og:title': metaData.metaTitle,
+        'og:description': metaData.metaDescription,
+        'og:url': metaData.url,
+        'og:image': metaData.coverImage,
+        'article:published_time': metaData.publishedDate,
+        'article:modified_time': metaData.modifiedDate,
+        'article:tag': metaData.tags,
+        'twitter:card': metaData.card,
+        'twitter:title': metaData.metaTitle,
+        'twitter:description': metaData.metaDescription,
+        'twitter:url': metaData.url,
+        'twitter:image:src': metaData.coverImage
+    };
+
+    return structuredData;
+}
+
+// Creates the final schema object with values that are not null
+function trimSchema(schema) {
+    var schemaObject = {};
+
+    _.each(schema, function (value, key) {
+        if (value !== null && value !== undefined) {
+            schemaObject[key] = value;
         }
+    });
+    return schemaObject;
+}
 
-        // Test to see if we are on a post page and that Structured data has not been disabled in config.js
-        if (self.post && useStructuredData) {
-            publishedDate = moment(self.post.published_at).toISOString();
-            modifiedDate = moment(self.post.updated_at).toISOString();
+function getPostSchema(metaData, data) {
+    var schema = {
+        '@context': 'http://schema.org',
+        '@type': 'Article',
+        publisher: metaData.title,
+        author: {
+            '@type': 'Person',
+            name: data.post.author.name,
+            image: metaData.authorImage,
+            url: metaData.authorUrl,
+            sameAs: data.post.author.website || null,
+            description: data.post.author.bio || null
+        },
+        headline: metaData.metaTitle,
+        url: metaData.url,
+        datePublished: metaData.publishedDate,
+        dateModified: metaData.modifiedDate,
+        image: metaData.coverImage,
+        keywords: metaData.keywords,
+        description: metaData.metaDescription
+    };
+    return trimSchema(schema);
+}
 
-            if (self.post.image) {
-                coverImage = self.post.image;
-                // Test to see if image was linked by url or uploaded
-                coverImage = coverImage.substring(0, 4) === 'http' ? coverImage : _.escape(blog.url) + coverImage;
-                card = 'summary_large_image';
-            }
+function getTagSchema(metaData, data) {
+    var schema = {
+        '@context': 'http://schema.org',
+        '@type': 'Series',
+        publisher: metaData.title,
+        url: metaData.url,
+        image: metaData.coverImage,
+        name: data.tag.name,
+        description: metaData.metaDescription
+    };
 
-            if (self.post.author.image) {
-                authorImage = self.post.author.image;
-                // Test to see if image was linked by url or uploaded
-                authorImage = authorImage.substring(0, 4) === 'http' ? authorImage : _.escape(blog.url) + authorImage;
-            }
+    return trimSchema(schema);
+}
 
-            schema = {
-                '@context': 'http://schema.org',
-                '@type': 'Article',
-                publisher: _.escape(blog.title),
-                author: {
-                    '@type': 'Person',
-                    name: self.post.author.name,
-                    image: authorImage,
-                    url: _.escape(blog.url) + '/author/' + self.post.author.slug,
-                    sameAs: self.post.author.website
-                },
-                headline: metaTitle,
-                url: url,
-                datePublished: publishedDate,
-                dateModified: modifiedDate,
-                image: coverImage,
-                keywords: keywords,
-                description: metaDescription
-            };
+function getAuthorSchema(metaData, data) {
+    var schema = {
+        '@context': 'http://schema.org',
+        '@type': 'Person',
+        sameAs: data.author.website || null,
+        publisher: metaData.title,
+        name: data.author.name,
+        url: metaData.authorUrl,
+        image: metaData.coverImage,
+        description: metaData.metaDescription
+    };
 
-            structuredData = {
-                'og:site_name': _.escape(blog.title),
-                'og:type': 'article',
-                'og:title': metaTitle,
-                'og:description': metaDescription + '...',
-                'og:url': url,
-                'og:image': coverImage,
-                'article:published_time': publishedDate,
-                'article:modified_time': modifiedDate,
-                'article:tag': tags,
-                'twitter:card': card,
-                'twitter:title': metaTitle,
-                'twitter:description': metaDescription + '...',
-                'twitter:url': url,
-                'twitter:image:src': coverImage
-            };
-            head.push('');
-            _.each(structuredData, function (content, property) {
-                if (property === 'article:tag') {
-                    _.each(tags, function (tag) {
-                        if (tag !== '') {
-                            head.push('<meta property="' + property + '" content="' + tag.trim() + '" />');
-                        }
-                    });
-                    head.push('');
-                } else if (content !== null && content !== undefined) {
-                    if (property.substring(0, 7) === 'twitter') {
-                        head.push('<meta name="' + property + '" content="' + content + '" />');
-                    } else {
-                        head.push('<meta property="' + property + '" content="' + content + '" />');
-                    }
+    return trimSchema(schema);
+}
+
+function getHomeSchema(metaData) {
+    var schema = {
+        '@context': 'http://schema.org',
+        '@type': 'Website',
+        publisher: metaData.title,
+        url: metaData.url,
+        image: metaData.coverImage,
+        description: metaData.metaDescription
+    };
+
+    return trimSchema(schema);
+}
+
+function chooseSchema(metaData, context, data) {
+    if (context === 'post') {
+        return getPostSchema(metaData, data);
+    } else if (context === 'home') {
+        return getHomeSchema(metaData);
+    } else if (context === 'tag') {
+        return getTagSchema(metaData, data);
+    } else if (context === 'author') {
+        return getAuthorSchema(metaData, data);
+    }
+}
+
+function finaliseStructuredData(structuredData, tags, head) {
+    _.each(structuredData, function (content, property) {
+        if (property === 'article:tag') {
+            _.each(tags, function (tag) {
+                if (tag !== '') {
+                    tag = hbs.handlebars.Utils.escapeExpression(tag.trim());
+                    head.push(writeMetaTag(property, tag));
                 }
             });
             head.push('');
-            head.push('<script type="application/ld+json">\n' + JSON.stringify(schema, null, '    ') + '\n    </script>\n');
+        } else if (content !== null && content !== undefined) {
+            head.push(writeMetaTag(property, content));
+        }
+    });
+    return head;
+}
+
+function finaliseSchema(schema, head) {
+    head.push('<script type="application/ld+json">\n' + JSON.stringify(schema, null, '    ') +
+            '\n    </script>\n'
+    );
+    return head;
+}
+
+function getAjaxHelper(clientId, clientSecret) {
+    return '<script type="text/javascript" src="' +
+        assetHelper('shared/ghost-url.js', {hash: {minifyInProduction: true}}) + '"></script>\n' +
+        '<script type="text/javascript">\n' +
+        'ghost.init({\n' +
+        '\tclientId: "' + clientId + '",\n' +
+        '\tclientSecret: "' + clientSecret + '"\n' +
+        '});\n' +
+        '</script>';
+}
+
+ghost_head = function (options) {
+    // create a shortcut for theme config
+    blog = config.theme;
+
+    /*jshint unused:false*/
+    var self = this,
+        useStructuredData = !config.isPrivacyDisabled('useStructuredData'),
+        head = [],
+        safeVersion = this.safeVersion,
+        props = {},
+        structuredData,
+        schema,
+        title = hbs.handlebars.Utils.escapeExpression(blog.title),
+        context = self.context ? self.context[0] : null,
+        contextObject = _.cloneDeep(self[context] || blog);
+
+    // Store Async calls in an object of named promises
+    props.url = urlHelper.call(self, {hash: {absolute: true}});
+    props.meta_description = meta_description.call(self, options);
+    props.meta_title = meta_title.call(self, options);
+    props.client = getClient();
+    getImage(props, context, contextObject);
+
+    // Resolves promises then push pushes meta data into ghost_head
+    return Promise.props(props).then(function (results) {
+        if (context) {
+            var metaData = initMetaData(context, self, results),
+                tags = tagsHelper.call(self.post, {hash: {autolink: 'false'}}).string.split(',');
+
+            // If there are tags - build the keywords metaData string
+            if (tags[0] !== '') {
+                metaData.keywords = hbs.handlebars.Utils.escapeExpression(tagsHelper.call(self.post,
+                    {hash: {autolink: 'false', separator: ', '}}
+                ).string);
+            }
+
+            // head is our main array that holds our meta data
+            head.push('<link rel="canonical" href="' + metaData.url + '" />');
+            head.push('<meta name="referrer" content="origin" />');
+
+            // Generate context driven pagination urls
+            if (self.pagination) {
+                getPaginationUrls(self.pagination, self.relativeUrl, self.secure, head);
+            }
+
+            // Test to see if we are on a post page and that Structured data has not been disabled in config.js
+            if (context !== 'paged' && context !== 'page' && useStructuredData) {
+                // Create context driven OpenGraph and Twitter meta data
+                structuredData = getStructuredData(metaData);
+                // Create context driven JSONLD object
+                schema = chooseSchema(metaData, context, self);
+                head.push('');
+                // Formats structured data and pushes to head array
+                finaliseStructuredData(structuredData, tags, head);
+                head.push('');
+                // Formats schema script/JSONLD data and pushes to head array
+                finaliseSchema(schema, head);
+            }
+
+            if (metaData.clientId && metaData.clientSecret) {
+                head.push(getAjaxHelper(metaData.clientId, metaData.clientSecret));
+            }
         }
 
-        head.push('<meta name="generator" content="Ghost ' + trimmedVersion + '" />');
+        head.push('<meta name="generator" content="Ghost ' + safeVersion + '" />');
         head.push('<link rel="alternate" type="application/rss+xml" title="' +
-            _.escape(blog.title)  + '" href="' + config.urlFor('rss') + '" />');
+            title  + '" href="' + config.urlFor('rss', null, true) + '" />');
+    }).then(function () {
+        return api.settings.read({key: 'ghost_head'});
+    }).then(function (response) {
+        head.push(response.settings[0].value);
         return filters.doFilter('ghost_head', head);
     }).then(function (head) {
         var headString = _.reduce(head, function (memo, item) { return memo + '\n    ' + item; }, '');

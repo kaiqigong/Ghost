@@ -8,23 +8,19 @@
 
 var hbs             = require('express-hbs'),
     _               = require('lodash'),
-    config          = require('../config'),
     filters         = require('../filters'),
-    utils           = require('./utils'),
+    api             = require('../api'),
     ghost_foot;
 
 ghost_foot = function (options) {
     /*jshint unused:false*/
-    var jquery = utils.isProduction ? 'jquery.min.js' : 'jquery.js',
-        foot = [];
+    var foot = [];
 
-    foot.push(utils.scriptTemplate({
-        source: config.paths.subdir + '/public/' + jquery,
-        version: config.assetHash
-    }));
-
-    return filters.doFilter('ghost_foot', foot).then(function (foot) {
-        var footString = _.reduce(foot, function (memo, item) { return memo + '\n' + item; }, '\n');
+    return api.settings.read({key: 'ghost_foot'}).then(function (response) {
+        foot.push(response.settings[0].value);
+        return filters.doFilter('ghost_foot', foot);
+    }).then(function (foot) {
+        var footString = _.reduce(foot, function (memo, item) { return memo + ' ' + item; }, '');
         return new hbs.handlebars.SafeString(footString.trim());
     });
 };

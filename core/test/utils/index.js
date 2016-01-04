@@ -3,12 +3,14 @@ var Promise       = require('bluebird'),
     _             = require('lodash'),
     fs            = require('fs-extra'),
     path          = require('path'),
+    uuid          = require('node-uuid'),
     migration     = require('../../server/data/migration/'),
     Models        = require('../../server/models'),
     SettingsAPI   = require('../../server/api/settings'),
     permissions   = require('../../server/permissions'),
     permsFixtures = require('../../server/data/fixtures/permissions/permissions.json'),
     DataGenerator = require('./fixtures/data-generator'),
+    filterData    = require('./fixtures/filter-param'),
     API           = require('./api'),
     fork          = require('./fork'),
     config        = require('../../server/config'),
@@ -21,6 +23,8 @@ var Promise       = require('bluebird'),
     teardown,
     setup,
     doAuth,
+    login,
+    togglePermalinks,
 
     initFixtures,
     initData,
@@ -129,6 +133,25 @@ fixtures = {
         }));
     },
 
+    insertMoreTags: function insertMoreTags(max) {
+        max = max || 50;
+        var tags = [],
+            tagName,
+            i,
+            knex = config.database.knex;
+
+        for (i = 0; i < max; i += 1) {
+            tagName = uuid.v4().split('-')[0];
+            tags.push(DataGenerator.forKnex.createBasic({name: tagName, slug: tagName}));
+        }
+
+        return sequence(_.times(tags.length, function (index) {
+            return function () {
+                return knex('tags').insert(tags[index]);
+            };
+        }));
+    },
+
     insertMorePostsTags: function insertMorePostsTags(max) {
         max = max || 50;
 
@@ -192,11 +215,14 @@ fixtures = {
         });
     },
 
-    overrideOwnerUser: function overrideOwnerUser() {
+    overrideOwnerUser: function overrideOwnerUser(slug) {
         var user,
             knex = config.database.knex;
 
         user = DataGenerator.forKnex.createUser(DataGenerator.Content.users[0]);
+        if (slug) {
+            user.slug = slug;
+        }
 
         return knex('users')
             .where('id', '=', '1')
@@ -278,11 +304,19 @@ fixtures = {
         });
     },
 
+    getImportFixturePath: function (filename) {
+        return path.resolve(__dirname + '/fixtures/import/' + filename);
+    },
+
+    getExportFixturePath: function (filename) {
+        return path.resolve(__dirname + '/fixtures/export/' + filename + '.json');
+    },
+
     loadExportFixture: function loadExportFixture(filename) {
-        var filepath = path.resolve(__dirname + '/fixtures/' + filename + '.json'),
+        var filePath = this.getExportFixturePath(filename),
             readFile = Promise.promisify(fs.readFile);
 
-        return readFile(filepath).then(function (fileContents) {
+        return readFile(filePath).then(function (fileContents) {
             var data;
 
             // Parse the json data
@@ -332,6 +366,14 @@ fixtures = {
         return knex('permissions').insert(permsToInsert).then(function () {
             return knex('permissions_roles').insert(permissionsRoles);
         });
+    },
+    insertClients: function insertClients() {
+        var knex = config.database.knex;
+        return knex('clients').insert(DataGenerator.forKnex.clients);
+    },
+    insertAccessToken: function insertAccessToken(override) {
+        var knex = config.database.knex;
+        return knex('accesstokens').insert(DataGenerator.forKnex.createToken(override));
     }
 };
 
@@ -366,6 +408,7 @@ toDoList = {
 
     posts: function insertPosts() { return fixtures.insertPosts(); },
     'posts:mu': function insertMultiAuthorPosts() { return fixtures.insertMultiAuthorPosts(); },
+    tags: function insertMoreTags() { return fixtures.insertMoreTags(); },
     apps: function insertApps() { return fixtures.insertApps(); },
     settings: function populateSettings() {
         return Models.Settings.populateDefaults().then(function () { return SettingsAPI.updateSettingsCache(); });
@@ -379,7 +422,9 @@ toDoList = {
     'perms:init': function initPermissions() { return permissions.init(); },
     perms: function permissionsFor(obj) {
         return function permissionsForObj() { return fixtures.permissionsFor(obj); };
-    }
+    },
+    clients: function insertClients() { return fixtures.insertClients(); },
+    filter: function createFilterParamFixtures() { return filterData(DataGenerator); }
 };
 
 /**
@@ -462,28 +507,71 @@ setup = function setup() {
 doAuth = function doAuth() {
     var options = arguments,
         request = arguments[0],
-        user = DataGenerator.forModel.users[0],
         fixtureOps;
 
     // Remove request from this list
     delete options[0];
     // No DB setup, but override the owner
     options = _.merge({'owner:post': true}, _.transform(options, function (result, val) {
-        result[val] = true;
+        if (val) {
+            result[val] = true;
+        }
     }));
 
     fixtureOps = getFixtureOps(options);
 
+    return sequence(fixtureOps).then(function () {
+        return login(request);
+    });
+};
+
+login = function login(request) {
+    var user = DataGenerator.forModel.users[0];
+
     return new Promise(function (resolve, reject) {
-        return sequence(fixtureOps).then(function () {
-            request.post('/ghost/api/v0.1/authentication/token/')
-                .send({grant_type: 'password', username: user.email, password: user.password, client_id: 'ghost-admin'})
+        request.post('/ghost/api/v0.1/authentication/token/')
+            .set('Origin', config.url)
+            .send({
+                grant_type: 'password',
+                username: user.email,
+                password: user.password,
+                client_id: 'ghost-admin',
+                client_secret: 'not_available'
+            }).end(function (err, res) {
+                if (err) {
+                    return reject(err);
+                }
+
+                resolve(res.body.access_token);
+            });
+    });
+};
+
+togglePermalinks = function togglePermalinks(request, toggle) {
+    var permalinkString = toggle === 'date' ? '/:year/:month/:day/:slug/' : '/:slug/';
+
+    return new Promise(function (resolve, reject) {
+        doAuth(request).then(function (token) {
+            request.put('/ghost/api/v0.1/settings/')
+                .set('Authorization', 'Bearer ' + token)
+                .send({settings: [
+                    {
+                        uuid: '75e994ae-490e-45e6-9207-0eab409c1c04',
+                        key: 'permalinks',
+                        value: permalinkString,
+                        type: 'blog',
+                        created_at: '2014-10-16T17:39:16.005Z',
+                        created_by: 1,
+                        updated_at: '2014-10-20T19:44:18.077Z',
+                        updated_by: 1
+                    }
+                ]})
                 .end(function (err, res) {
                     if (err) {
                         return reject(err);
                     }
 
-                    resolve(res.body.access_token);
+                    resolve(res.body);
                 });
         });
     });
@@ -499,6 +587,8 @@ module.exports = {
     teardown: teardown,
     setup: setup,
     doAuth: doAuth,
+    login: login,
+    togglePermalinks: togglePermalinks,
 
     initFixtures: initFixtures,
     initData: initData,

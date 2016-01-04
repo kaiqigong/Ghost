@@ -1,4 +1,5 @@
-var url             = require('url'),
+var _               = require('lodash'),
+    url             = require('url'),
     moment          = require('moment'),
     config          = require('../../server/config'),
     ApiRouteBase    = '/ghost/api/v0.1/',
@@ -8,12 +9,13 @@ var url             = require('url'),
     expectedProperties = {
         configuration: ['key', 'value'],
         posts: ['posts', 'meta'],
+        tags: ['tags', 'meta'],
         users: ['users', 'meta'],
         roles: ['roles'],
         pagination: ['page', 'limit', 'pages', 'total', 'next', 'prev'],
         post: ['id', 'uuid', 'title', 'slug', 'markdown', 'html', 'meta_title', 'meta_description',
             'featured', 'image', 'status', 'language', 'created_at', 'created_by', 'updated_at',
-            'updated_by', 'published_at', 'published_by', 'page', 'author', 'tags', 'fields'
+            'updated_by', 'published_at', 'published_by', 'page', 'author', 'url'
         ],
         settings: ['settings', 'meta'],
         setting: ['id', 'uuid', 'key', 'value', 'type', 'created_at', 'created_by', 'updated_at', 'updated_by'],
@@ -22,7 +24,7 @@ var url             = require('url'),
         ],
         theme: ['uuid', 'name', 'version', 'active'],
         user: ['id', 'uuid', 'name', 'slug', 'email', 'image', 'cover', 'bio', 'website',
-            'location', 'accessibility', 'status', 'language', 'meta_title', 'meta_description', 'last_login',
+            'location', 'accessibility', 'status', 'language', 'meta_title', 'meta_description', 'tour', 'last_login',
             'created_at', 'created_by',  'updated_at', 'updated_by'
         ],
         notification: ['type', 'message', 'status', 'id', 'dismissible', 'location'],
@@ -62,9 +64,10 @@ function checkResponseValue(jsonResponse, properties) {
     Object.keys(jsonResponse).length.should.eql(properties.length);
 }
 
-function checkResponse(jsonResponse, objectType, additionalProperties) {
+function checkResponse(jsonResponse, objectType, additionalProperties, missingProperties) {
     var checkProperties = expectedProperties[objectType];
     checkProperties = additionalProperties ? checkProperties.concat(additionalProperties) : checkProperties;
+    checkProperties = missingProperties ? _.xor(checkProperties, missingProperties) : checkProperties;
 
     checkResponseValue(jsonResponse, checkProperties);
 }
@@ -73,11 +76,16 @@ function isISO8601(date) {
     return moment(date).parsingFlags().iso;
 }
 
+function getURL() {
+    return schema + host;
+}
+
 module.exports = {
     getApiURL: getApiURL,
     getApiQuery: getApiQuery,
     getSigninURL: getSigninURL,
     getAdminURL: getAdminURL,
+    getURL: getURL,
     checkResponse: checkResponse,
     checkResponseValue: checkResponseValue,
     isISO8601: isISO8601
